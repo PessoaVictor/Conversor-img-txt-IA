@@ -1,6 +1,7 @@
 const imageQueue = document.getElementById('imageQueue');
 const convertButton = document.getElementById('convertButton');
 const clearImagesButton = document.getElementById('clearImagesButton');
+const uploadInput = document.getElementById('uploadInput');
 const results = document.getElementById('results');
 const chatbotHeader = document.getElementById('chatbot-header');
 const chatbotBody = document.getElementById('chatbot-body');
@@ -8,7 +9,6 @@ const chatbotMessages = document.getElementById('chatbot-messages');
 const chatbotInput = document.getElementById('chatbot-input');
 const chatbotSend = document.getElementById('chatbot-send');
 const clearChatButton = document.getElementById('clearChatButton');
-const minimizeChatbot = document.getElementById('minimizeChatbot');
 
 let images = [];
 
@@ -17,7 +17,7 @@ function addImageToQueue(url, blob) {
     container.className = 'image-container';
     const img = document.createElement('img');
     img.src = url;
-    img.alt = 'Pasted image for OCR';
+    img.alt = 'Imagem para OCR';
     const removeButton = document.createElement('button');
     removeButton.textContent = 'Remover';
     removeButton.className = 'remove-button';
@@ -30,6 +30,107 @@ function addImageToQueue(url, blob) {
     imageQueue.appendChild(container);
     images.push({ blob, container, url });
 }
+
+uploadInput.addEventListener('change', (event) => {
+    const files = event.target.files;
+    for (const file of files) {
+        const url = URL.createObjectURL(file);
+        addImageToQueue(url, file);
+    }
+});
+
+document.addEventListener('paste', (event) => {
+    const items = event.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+        if (item.type.startsWith('image/')) {
+            const blob = item.getAsFile();
+            if (blob) {
+                const url = URL.createObjectURL(blob);
+                addImageToQueue(url, blob);
+            }
+        }
+    }
+});
+
+convertButton.addEventListener('click', async () => {
+    if (images.length === 0) {
+        results.innerHTML = '<p>Nenhuma imagem na fila.</p>';
+        return;
+    }
+    results.innerHTML = '';
+    convertButton.disabled = true;
+    convertButton.textContent = 'Processando...';
+
+    const processingPromises = images.map(async (imageInfo) => {
+        const { blob, container, url } = imageInfo;
+        const resultBlock = document.createElement('div');
+        resultBlock.className = 'result-block';
+        const imgClone = container.querySelector('img').cloneNode();
+        resultBlock.appendChild(imgClone);
+        const textElement = document.createElement('p');
+        textElement.textContent = 'Processando...';
+        resultBlock.appendChild(textElement);
+        const copyButton = document.createElement('button');
+        copyButton.className = 'copy-button';
+        copyButton.textContent = 'Copiar';
+        copyButton.disabled = true;
+        resultBlock.appendChild(copyButton);
+        results.appendChild(resultBlock);
+
+        try {
+            if (typeof Tesseract === 'undefined') {
+                throw new Error('Tesseract library não carregada.');
+            }
+            const { data: { text: extractedText } } = await Tesseract.recognize(blob, 'eng');
+            const finalText = extractedText || '[Nenhum texto detectado]';
+            textElement.textContent = finalText;
+
+            if (extractedText) {
+                copyButton.disabled = false;
+                copyButton.onclick = () => {
+                    navigator.clipboard.writeText(finalText).then(() => {
+                        copyButton.textContent = 'Copiado!';
+                        copyButton.disabled = true;
+                        setTimeout(() => {
+                            copyButton.textContent = 'Copiar';
+                            copyButton.disabled = false;
+                        }, 2000);
+                    }).catch(() => {
+                        const copyErrorSpan = document.createElement('span');
+                        copyErrorSpan.textContent = ' (Falha ao copiar)';
+                        copyErrorSpan.style.color = 'orange';
+                        copyButton.insertAdjacentElement('afterend', copyErrorSpan);
+                        setTimeout(() => copyErrorSpan.remove(), 3000);
+                    });
+                };
+            }
+        } catch (error) {
+            textElement.textContent = 'Erro ao processar a imagem.';
+            textElement.style.color = 'red';
+            copyButton.disabled = true;
+        } finally {
+            URL.revokeObjectURL(url);
+        }
+    });
+
+    try {
+        await Promise.all(processingPromises);
+    } catch {
+        results.innerHTML += '<p style="color: red;">Ocorreu um erro durante o processamento de algumas imagens.</p>';
+    } finally {
+        images = [];
+        imageQueue.innerHTML = '';
+        convertButton.disabled = false;
+        convertButton.textContent = 'Converter';
+    }
+});
+
+clearImagesButton.addEventListener('click', () => {
+    images = [];
+    imageQueue.innerHTML = '';
+    results.innerHTML = '';
+});
 
 function appendChatMessage(text, className) {
     const messageElement = document.createElement('div');
@@ -73,10 +174,8 @@ async function getAIResponse(message) {
             return errorMessage;
         }
         const data = await response.json();
-        if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0]) {
+        if (data.candidates && data.candidates[0]?.content?.parts[0]?.text) {
             return data.candidates[0].content.parts[0].text.trim();
-        } else if (data.promptFeedback && data.promptFeedback.blockReason) {
-            return `[Resposta bloqueada pela IA: ${data.promptFeedback.blockReason}]`;
         } else {
             return 'Desculpe, a resposta da IA veio em um formato inesperado.';
         }
@@ -87,95 +186,6 @@ async function getAIResponse(message) {
         return 'Desculpe, ocorreu um erro inesperado ao tentar falar com a IA.';
     }
 }
-
-document.addEventListener('paste', (event) => {
-    const items = event.clipboardData?.items;
-    if (!items) return;
-    for (const item of items) {
-        if (item.type.startsWith('image/')) {
-            const blob = item.getAsFile();
-            if (blob) {
-                const url = URL.createObjectURL(blob);
-                addImageToQueue(url, blob);
-            }
-        }
-    }
-});
-
-convertButton.addEventListener('click', async () => {
-    if (images.length === 0) {
-        results.innerHTML = '<p>Nenhuma imagem na fila.</p>';
-        return;
-    }
-    results.innerHTML = '';
-    convertButton.disabled = true;
-    convertButton.textContent = 'Processando...';
-    const processingPromises = images.map(async (imageInfo) => {
-        const { blob, container, url } = imageInfo;
-        const resultBlock = document.createElement('div');
-        resultBlock.className = 'result-block';
-        const imgClone = container.querySelector('img').cloneNode();
-        resultBlock.appendChild(imgClone);
-        const textElement = document.createElement('p');
-        textElement.textContent = 'Processando...';
-        resultBlock.appendChild(textElement);
-        const copyButton = document.createElement('button');
-        copyButton.className = 'copy-button';
-        copyButton.textContent = 'Copiar';
-        copyButton.disabled = true;
-        resultBlock.appendChild(copyButton);
-        results.appendChild(resultBlock);
-        try {
-            if (typeof Tesseract === 'undefined') {
-                throw new Error('Tesseract library not loaded.');
-            }
-            const { data: { text: extractedText } } = await Tesseract.recognize(blob, 'eng');
-            const finalText = extractedText || '[Nenhum texto detectado]';
-            textElement.textContent = finalText;
-            if (extractedText) {
-                copyButton.disabled = false;
-                copyButton.onclick = () => {
-                    navigator.clipboard.writeText(finalText).then(() => {
-                        copyButton.textContent = 'Copiado!';
-                        copyButton.disabled = true;
-                        setTimeout(() => {
-                            copyButton.textContent = 'Copiar';
-                            copyButton.disabled = false;
-                        }, 2000);
-                    }).catch(err => {
-                        const copyErrorSpan = document.createElement('span');
-                        copyErrorSpan.textContent = ' (Falha ao copiar)';
-                        copyErrorSpan.style.color = 'orange';
-                        copyButton.insertAdjacentElement('afterend', copyErrorSpan);
-                        setTimeout(() => copyErrorSpan.remove(), 3000);
-                    });
-                };
-            }
-        } catch (error) {
-            textElement.textContent = 'Erro ao processar a imagem.';
-            textElement.style.color = 'red';
-            copyButton.disabled = true;
-        } finally {
-            URL.revokeObjectURL(url);
-        }
-    });
-    try {
-        await Promise.all(processingPromises);
-    } catch {
-        results.innerHTML += '<p style="color: red;">Ocorreu um erro durante o processamento de algumas imagens.</p>';
-    } finally {
-        images = [];
-        imageQueue.innerHTML = '';
-        convertButton.disabled = false;
-        convertButton.textContent = 'Converter Imagens Coladas';
-    }
-});
-
-clearImagesButton.addEventListener('click', () => {
-    images = [];
-    imageQueue.innerHTML = '';
-    results.innerHTML = '';
-});
 
 chatbotHeader.addEventListener('click', () => {
     chatbotBody.classList.toggle('open');
@@ -206,8 +216,4 @@ chatbotInput.addEventListener('keydown', (event) => {
 
 clearChatButton.addEventListener('click', () => {
     chatbotMessages.innerHTML = '';
-});
-
-minimizeChatbot.addEventListener('click', () => {
-    chatbotBody.classList.toggle('open');
 });
