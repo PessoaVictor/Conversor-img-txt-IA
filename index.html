@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Imagem pra texto</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <h1>Imagem pra texto do Vhalp</h1>
+    <p class="instructions">Cole uma imagem (Ctrl + V) para adicioná-la à fila.</p>
+    <div id="imageQueue" class="card"></div>
+    <div class="button-container">
+      <button id="convertButton" class="primary-button">Converter</button>
+      <button id="clearImagesButton" class="secondary-button">🔄</button>
+    </div>
+    <div id="results"></div>
+  </div>
+
+  <div id="chatbot">
+    <div id="chatbot-header">
+      Chatbot
+      <span class="icon-minimize">_</span>
+    </div>
+    <div id="chatbot-body">
+      <div id="chatbot-messages"></div>
+      <div id="chatbot-input-container">
+        <input type="text" id="chatbot-input" autocomplete="off" placeholder="Digite sua pergunta..." />
+        <button id="chatbot-send">Enviar</button>
+        <button id="clearChatButton" class="icon-button">Limpar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.0.0/dist/tesseract.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
